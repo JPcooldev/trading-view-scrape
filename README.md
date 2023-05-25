@@ -5,3 +5,5 @@ Module for scraping and ploting financial statements (income, balance sheet and 
 Input is a ticker of given company (e.g. AAPL for Apple Inc.) and output is pandas.DataFrame format of financial statement.
 <br>
 Ideal for Jupyter-lab/notebook enviroment.
+
+<img src="https://github.com/JPcooldev/trading-view-scrape/edit/main/images/tradingview-scrape-illustration.png" width="400">
