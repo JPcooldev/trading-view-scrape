@@ -6,4 +6,8 @@ Input is a ticker of given company (e.g. AAPL for Apple Inc.) and output is pand
 <br>
 Ideal for Jupyter-lab/notebook enviroment.
 <br><br>
-<img src="https://github.com/JPcooldev/trading-view-scrape/blob/main/images/tradingview-scrape-illustration.png" width="700">
+<img src="https://github.com/JPcooldev/trading-view-scrape/blob/main/images/exampleDataFrame.png" width="700">
+<img src="https://github.com/JPcooldev/trading-view-scrape/blob/main/images/exampleBarIncome.png" width="700">
+<img src="https://github.com/JPcooldev/trading-view-scrape/blob/main/images/exampleBarBalance.png" width="700">
+<img src="https://github.com/JPcooldev/trading-view-scrape/blob/main/images/exampleBarCash.png" width="700">
+
