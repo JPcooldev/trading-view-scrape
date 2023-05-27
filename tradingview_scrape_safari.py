@@ -1,5 +1,7 @@
 from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 import re
 import pandas as pd
 import numpy as np
@@ -15,71 +17,28 @@ class Ticker:
             
     """
     def __init__(self, ticker: str, exchange: str):
-        self.ticker = ticker.capitalize()
+        self.ticker = ticker.upper()
         self.exchange = exchange.capitalize()
         self.url_ticker = f'{self.exchange}-{self.ticker}'
         self.url_base = 'https://www.tradingview.com/symbols/'
         self.incomestatement = self.get_incomestatement()
         self.balancesheet = self.get_balancesheet()
         self.cashflow = self.get_cashflow()
-        self.currency = ""
+        self.currency = None
         
-
         
-    def get_incomestatement(self,
-                        totalrevenue: bool = False, 
-                        cogs: bool = False,
-                        grossprofit: bool = False,
-                        operatingexpenses: bool = False,
-                        operatingincome: bool = False,
-                        pretaxincome: bool = False,
-                        taxes: bool = False,
-                        netincome: bool = False,
-                        totaloperexpenses:bool = False,
-                        eps: bool = False,
-                        ebitda: bool = False,
-                        ebit: bool = False):
+    def get_incomestatement(self):
         """
-        Based on given parameters, returns income statement in pandas.DataFrame format. 
-        If no parameters are given, it includes all parameters into statement.
+        Returns DataFrame of income statement.
         """
-        
-        url = self.url_base + self.url_ticker + '/financials-income-statement/'
 
         todrop = ['Non-operating income, total', 'Equity in earnings','Non-controlling/minority interest',
                   'After tax other income/expense', 'Net income before discontinued operations', 'Discontinued operations', 
                   'Dilution adjustment', 'Preferred dividends','Diluted net income available to common stockholders',
                   'Diluted earnings per share (Diluted EPS)','Average basic shares outstanding', 'Diluted shares outstanding']
-
         
-        if (totalrevenue or cogs or grossprofit or operatingexpenses or operatingincome or 
-            pretaxincome or taxes or netincome or totaloperexpenses or eps or ebitda or ebit) == True:
-            if totalrevenue == False:
-                todrop.append("Total revenue")
-            if cogs == False:
-                todrop.append("Cost of goods sold")
-            if grossprofit == False:
-                todrop.append("Gross profit")
-            if operatingexpenses == False:
-                todrop.append("Operating expenses (excl. COGS)")
-            if operatingincome == False:
-                todrop.append("Operating income")
-            if pretaxincome == False:
-                todrop.append("Pretax income")
-            if taxes == False:
-                todrop.append("Taxes")
-            if netincome == False:
-                todrop.append("Net income")
-            if totaloperexpenses == False:
-                todrop.append("Total operating expenses")
-            if eps == False:
-                todrop.append("Basic earnings per share (Basic EPS)")
-            if ebitda == False:
-                todrop.append("EBITDA")
-            if ebit == False:
-                todrop.append("EBIT")
+        url = self.url_base + self.url_ticker + '/financials-income-statement/'
         
-            
         scrp = self.scrape_financials(url=url, lblsec_cls="container-OWKkVLyj",
                       currency_cls="firstColumn-OWKkVLyj",
                       lblyear_cls="value-OxVAcLqi",
@@ -91,36 +50,15 @@ class Ticker:
         return scrp
     
     
-    def get_balancesheet(self,
-                     totalassets: bool = False, 
-                     totalliabilities: bool = False,
-                     totalequity: bool = False,
-                     totaldebt: bool = False,
-                     netdebt: bool = False,
-                     bookvaluepershare: bool = False):
+    def get_balancesheet(self):
         """
         Based on given parameters, returns balance sheet statement in pandas.DataFrame format. 
         If no parameters are given, it includes all parameters into statement.
         """
-        
+    
         url = self.url_base + self.url_ticker + '/financials-balance-sheet/'
 
         todrop = ["Total liabilities & shareholders' equities"]
-        
-        if (totalassets or totalliabilities or totalequity or totaldebt or netdebt or 
-            bookvaluepershare) == True:
-            if totalassets == False:
-                todrop.append("Total assets")
-            if totalliabilities == False:
-                todrop.append("Total liabilities")
-            if totalequity == False:
-                todrop.append("Total equity")
-            if totaldebt == False:
-                todrop.append("Total debt")
-            if netdebt == False:
-                todrop.append("Net debt")
-            if bookvaluepershare == False:
-                todrop.append("Book value per share")
         
         scrp = self.scrape_financials(url=url, lblsec_cls="container-OWKkVLyj",
                       currency_cls="firstColumn-OWKkVLyj",
@@ -133,11 +71,7 @@ class Ticker:
         return scrp
     
     
-    def get_cashflow(self,
-                 operating: bool = False, 
-                 investing: bool = False,
-                 financing: bool = False,
-                 freecashflow: bool = False):
+    def get_cashflow(self):
         """
         Based on given parameters, returns cashflow statement in pandas.DataFrame format. 
         If no parameters are given, it includes all parameters into statement.
@@ -146,16 +80,6 @@ class Ticker:
 
         todrop = []
         
-        if (operating or investing or financing or freecashflow) == True:
-            if operating == False:
-                todrop.append("Cash from operating activities")
-            if investing == False:
-                todrop.append("Cash from investing activities")
-            if financing == False:
-                todrop.append("Cash from financing activities")
-            if freecashflow == False:
-                todrop.append("Free cash flow")
-        
         scrp = self.scrape_financials(url=url, lblsec_cls="container-OWKkVLyj",
                       currency_cls="firstColumn-OWKkVLyj",
                       lblyear_cls="value-OxVAcLqi",
@@ -167,7 +91,7 @@ class Ticker:
         return scrp
 
     
-    def scrape_financials(self, url: str, lblsec_cls: str, currency_cls: str, 
+    def scrape_financials(self, url: list, lblsec_cls: str, currency_cls: str, 
                  lblyear_cls: str, mtrsec_cls: str, mtrname_cls: str, 
                  mtrdata_cls: str):
         """
@@ -175,14 +99,16 @@ class Ticker:
         1. Finds section for title, then scrapes used currency and period in which data occured.
         2. Finds sections for each financial metric and its data.
         """
+        
         driver = webdriver.Safari()
         driver.get(url)
         time.sleep(0.7)
-
+        
         dfs = []
         data = {}
-
-        labelsection = driver.find_element(by=By.CLASS_NAME, value=lblsec_cls)
+        
+        labelsection = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, lblsec_cls)))
+        #labelsection = driver.find_element(by=By.CLASS_NAME, value=lblsec_cls)
         currency = labelsection.find_element(by=By.CLASS_NAME, value=currency_cls).text 
         labelyears = [i.text for i in labelsection.find_elements(by=By.CLASS_NAME, value=lblyear_cls)]
         data[currency] = labelyears
@@ -230,7 +156,7 @@ class Ticker:
         elif financialstatement.equals(self.cashflow):
             metrics = ['Cash from operating activities', 'Cash from investing activities', 'Cash from financing activities',
                        'Free cash flow']
-            colors = ['blue', 'green', 'red', 'oarnge', 'white']
+            colors = ['blue', 'green', 'red', 'orange', 'white']
         else:
             raise ValueError("Not a financial statement name")
         
@@ -256,10 +182,13 @@ class Ticker:
         
         if 'Total revenue' in metrics:
             plt.xticks(range(2, len(x), num_metrics+1), x_labels)
+            plt.title(self.ticker + " Income Statement")
         elif 'Total assets' in metrics:
             plt.xticks(range(1, len(x), num_metrics+1), x_labels)
+            plt.title(self.ticker + " Balance Sheet")
         elif 'Free cash flow' in metrics:
             plt.xticks(range(2, len(x), num_metrics+1), x_labels)
+            plt.title(self.ticker + " Cash Flow")
         
         # Extend ylim to have space for legend
         plt.ylim(plt.ylim()[0], plt.ylim()[1] * 1.25)
@@ -329,6 +258,116 @@ class Ticker:
             ans = '-' + ans
             
         return ans
-                
-    #next
+         
+    
+    def incomestatement(self,
+                        totalrevenue: bool = False, 
+                        cogs: bool = False,
+                        grossprofit: bool = False,
+                        operatingexpenses: bool = False,
+                        operatingincome: bool = False,
+                        pretaxincome: bool = False,
+                        taxes: bool = False,
+                        netincome: bool = False,
+                        totaloperexpenses:bool = False,
+                        eps: bool = False,
+                        ebitda: bool = False,
+                        ebit: bool = False):
+        """
+        Based on given parameters, returns income statement in pandas.DataFrame format. 
+        If no parameters are given, it includes all parameters into statement.
+        """
         
+        todrop = []
+        
+        if (totalrevenue or cogs or grossprofit or operatingexpenses or operatingincome or 
+            pretaxincome or taxes or netincome or totaloperexpenses or eps or ebitda or ebit) == True:
+            if totalrevenue == False:
+                todrop.append("Total revenue")
+            if cogs == False:
+                todrop.append("Cost of goods sold")
+            if grossprofit == False:
+                todrop.append("Gross profit")
+            if operatingexpenses == False:
+                todrop.append("Operating expenses (excl. COGS)")
+            if operatingincome == False:
+                todrop.append("Operating income")
+            if pretaxincome == False:
+                todrop.append("Pretax income")
+            if taxes == False:
+                todrop.append("Taxes")
+            if netincome == False:
+                todrop.append("Net income")
+            if totaloperexpenses == False:
+                todrop.append("Total operating expenses")
+            if eps == False:
+                todrop.append("Basic earnings per share (Basic EPS)")
+            if ebitda == False:
+                todrop.append("EBITDA")
+            if ebit == False:
+                todrop.append("EBIT")
+        
+        income_copy = self.incomestatement.copy()
+        income_copy = income_copy.drop(todrop, axis=0)
+        return income_copy
+        
+
+    def balancesheet(self,
+                     totalassets: bool = False, 
+                     totalliabilities: bool = False,
+                     totalequity: bool = False,
+                     totaldebt: bool = False,
+                     netdebt: bool = False,
+                     bookvaluepershare: bool = False):
+        """
+        Based on given parameters, returns balance sheet statement in pandas.DataFrame format. 
+        If no parameters are given, it includes all parameters into statement.
+        """
+        
+        todrop = []
+        
+        if (totalassets or totalliabilities or totalequity or totaldebt or netdebt or 
+            bookvaluepershare) == True:
+            if totalassets == False:
+                todrop.append("Total assets")
+            if totalliabilities == False:
+                todrop.append("Total liabilities")
+            if totalequity == False:
+                todrop.append("Total equity")
+            if totaldebt == False:
+                todrop.append("Total debt")
+            if netdebt == False:
+                todrop.append("Net debt")
+            if bookvaluepershare == False:
+                todrop.append("Book value per share")
+        
+        balance_copy = self.balancesheet.copy()
+        balance_copy = balance_copy.drop(todrop, axis=0)
+        return balance_copy
+    
+    
+    def cashflow(self,
+                 operating: bool = False, 
+                 investing: bool = False,
+                 financing: bool = False,
+                 freecashflow: bool = False):
+        """
+        Based on given parameters, returns cashflow statement in pandas.DataFrame format. 
+        If no parameters are given, it includes all parameters into statement.
+        """
+        
+        todrop = []
+        
+        if (operating or investing or financing or freecashflow) == True:
+            if operating == False:
+                todrop.append("Cash from operating activities")
+            if investing == False:
+                todrop.append("Cash from investing activities")
+            if financing == False:
+                todrop.append("Cash from financing activities")
+            if freecashflow == False:
+                todrop.append("Free cash flow")
+        
+        cash_copy = self.cashflow.copy()
+        cash_copy = cash_copy.drop(todrop, axis=0)
+        return cash_copy
