@@ -9,90 +9,32 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-"""https://www.tradingview.com/symbols/{exchange}-{ticker}/financials-{statement-name}"""
 
 class Ticker:
     """parameters:
-            ticker - string or list of strings, e.g. 'AAPL'
-            TTM - boolean, TTM included or not
-            
+            ticker - ticker of a company (name on stock exchange), e.g. 'AAPL', 'GOOGL', ...
+            exchange - the stock exchnage where the stock trades, e.g. 'NASDAQ', 'NYSE', ...
     """
     def __init__(self, ticker: str, exchange: str):
         self.ticker = ticker.upper()
         self.exchange = exchange.capitalize()
         self.url_ticker = f'{self.exchange}-{self.ticker}'
         self.url_base = 'https://www.tradingview.com/symbols/'
-        self.incomestatement = self.get_incomestatement()
-        self.balancesheet = self.get_balancesheet()
-        self.cashflow = self.get_cashflow()
-        self.currency = None
-        
-        
-    def get_incomestatement(self):
-        """
-        Returns DataFrame of income statement.
-        """
-
-        todrop = ['Non-operating income, total', 'Equity in earnings','Non-controlling/minority interest',
-                  'After tax other income/expense', 'Net income before discontinued operations', 'Discontinued operations', 
-                  'Dilution adjustment', 'Preferred dividends','Diluted net income available to common stockholders',
-                  'Diluted earnings per share (Diluted EPS)','Average basic shares outstanding', 'Diluted shares outstanding']
-        
-        url = self.url_base + self.url_ticker + '/financials-income-statement/'
-        
-        scrp = self.scrape_financials(url=url, lblsec_cls="container-OWKkVLyj",
+        self.currency = ""
+        # These attributes have '_' at the end because same named methods exists (which can select only specific metrics)
+        self.incomestatement_ = None
+        self.balancesheet_ = None
+        self.cashflow_ = None
+        # Scrape website and save 3 financial statements
+        self.scrape_financials(lblsec_cls="container-OWKkVLyj",
                       currency_cls="firstColumn-OWKkVLyj",
                       lblyear_cls="value-OxVAcLqi",
                       mtrsec_cls="container-C9MdAMrq",
                       mtrname_cls="titleText-C9MdAMrq",
                       mtrdata_cls="value-OxVAcLqi")
         
-        scrp = scrp.drop(todrop, axis=0)
-        return scrp
     
-    
-    def get_balancesheet(self):
-        """
-        Based on given parameters, returns balance sheet statement in pandas.DataFrame format. 
-        If no parameters are given, it includes all parameters into statement.
-        """
-    
-        url = self.url_base + self.url_ticker + '/financials-balance-sheet/'
-
-        todrop = ["Total liabilities & shareholders' equities"]
-        
-        scrp = self.scrape_financials(url=url, lblsec_cls="container-OWKkVLyj",
-                      currency_cls="firstColumn-OWKkVLyj",
-                      lblyear_cls="value-OxVAcLqi",
-                      mtrsec_cls="container-C9MdAMrq",
-                      mtrname_cls="titleText-C9MdAMrq",
-                      mtrdata_cls="value-OxVAcLqi")
-        
-        scrp = scrp.drop(todrop, axis=0)
-        return scrp
-    
-    
-    def get_cashflow(self):
-        """
-        Based on given parameters, returns cashflow statement in pandas.DataFrame format. 
-        If no parameters are given, it includes all parameters into statement.
-        """
-        url = self.url_base + self.url_ticker + '/financials-cash-flow/'
-
-        todrop = []
-        
-        scrp = self.scrape_financials(url=url, lblsec_cls="container-OWKkVLyj",
-                      currency_cls="firstColumn-OWKkVLyj",
-                      lblyear_cls="value-OxVAcLqi",
-                      mtrsec_cls="container-C9MdAMrq",
-                      mtrname_cls="titleText-C9MdAMrq",
-                      mtrdata_cls="value-OxVAcLqi")
-        
-        scrp = scrp.drop(todrop, axis=0)
-        return scrp
-
-    
-    def scrape_financials(self, url: list, lblsec_cls: str, currency_cls: str, 
+    def scrape_financials(self, lblsec_cls: str, currency_cls: str, 
                  lblyear_cls: str, mtrsec_cls: str, mtrname_cls: str, 
                  mtrdata_cls: str):
         """
@@ -104,58 +46,82 @@ class Ticker:
         options = Options()
         options.add_argument("--headless")
         driver = webdriver.Chrome(options=options)
-        driver.get(url)
+        url_ends = ['income-statement/', 'balance-sheet/', 'cash-flow/']
         
-        dfs = []
-        data = {}
-        
-        # Wait for the label section to be located
-        labelsection = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, lblsec_cls)))
-        currency = labelsection.find_element(by=By.CLASS_NAME, value=currency_cls).text 
-        labelyears = [i.text for i in labelsection.find_elements(by=By.CLASS_NAME, value=lblyear_cls)]
-        data[currency] = labelyears
-        
-        self.currency = currency
-        
-        metricsection = driver.find_elements(by=By.CLASS_NAME, value=mtrsec_cls)
-        
-        for sec in metricsection:
-            metricname = sec.find_element(by=By.CLASS_NAME, value=mtrname_cls).text
-            metricdata = sec.find_elements(by=By.CLASS_NAME, value=mtrdata_cls)
-
-            data[metricname] = [re.sub(r'[\u202a\u202c]', '', i.text) for i in metricdata]
-        
-        columns = data[currency]
-        
-        del data[currency]
-        
-        tab = pd.DataFrame(index=data.keys(), columns=columns)
-        for key, val in data.items():
-            tab.loc[key] = val  
+        for finstat_url in url_ends:
+            url = self.url_base + self.url_ticker + '/financials-' + finstat_url
+            driver.get(url)
+            # explicitly wait till html elements are loaded 
+            # (Selenium until() doesn't work perfectly, but 0.7s is the right time to load)
+            time.sleep(0.7)
             
-        dfs.append(tab)
+            dfs = []
+            data = {}
 
-        df = pd.concat(dfs, axis=1)
-                                
+            #labelsection = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, lblsec_cls)))
+            labelsection = driver.find_element(by=By.CLASS_NAME, value=lblsec_cls)
+            currency = labelsection.find_element(by=By.CLASS_NAME, value=currency_cls).text 
+            labelyears = [i.text for i in labelsection.find_elements(by=By.CLASS_NAME, value=lblyear_cls)]
+            data[currency] = labelyears
+
+            if self.currency == "":
+                self.currency = currency
+
+            metricsection = driver.find_elements(by=By.CLASS_NAME, value=mtrsec_cls)
+
+            for sec in metricsection:
+                metricname = sec.find_element(by=By.CLASS_NAME, value=mtrname_cls).text
+                metricdata = sec.find_elements(by=By.CLASS_NAME, value=mtrdata_cls)
+
+                data[metricname] = [re.sub(r'[\u202a\u202c]', '', i.text) for i in metricdata]
+
+            columns = data[currency]
+
+            del data[currency]
+
+            # Create DataFrame 
+            tab = pd.DataFrame(index=data.keys(), columns=columns)
+            for key, val in data.items():
+                tab.loc[key] = val  
+
+            dfs.append(tab)
+            df = pd.concat(dfs, axis=1)
+            
+            # Delete columns with not main financial metrics
+            if finstat_url == 'income-statement/':
+                todrop = ['Non-operating income, total', 'Equity in earnings','Non-controlling/minority interest',
+                  'After tax other income/expense', 'Net income before discontinued operations', 'Discontinued operations', 
+                  'Dilution adjustment', 'Preferred dividends','Diluted net income available to common stockholders',
+                  'Diluted earnings per share (Diluted EPS)','Average basic shares outstanding', 'Diluted shares outstanding']
+                df = df.drop(todrop, axis=0)
+                self.incomestatement_ = df
+            elif finstat_url == 'balance-sheet/':
+                todrop = ["Total liabilities & shareholders' equities"]
+                df = df.drop(todrop, axis=0)
+                self.balancesheet_ = df
+            elif finstat_url == 'cash-flow/':
+                self.cashflow_ = df
+
         driver.quit()
-
-        return df
 
     
     def bar(self, financialstatement: pd.DataFrame):
         """
-        Ploting basic metrics into bar graph.
+        Ploting basic metrics into bar graph. X-axis is time period (quaters) and bars are values of given metric.
+        Income statement: Total revenue, Gross profit, Operating income, Pretax income, Net income
+        Balance sheet: Total assets, Total liabilities
+        Cash flow: Cash from operating activities, Cash from investing activities, Cash from financing activities, Free cash flow
         """
         metrics = None
         colors = None
         
-        if financialstatement.equals(self.incomestatement):
+        if financialstatement.equals(self.incomestatement_):
             metrics = ['Total revenue', 'Gross profit', 'Operating income', 'Pretax income', 'Net income']
             colors = ['blue', 'green', 'purple', 'red', 'orange', 'white']
-        elif financialstatement.equals(self.balancesheet):
+        elif financialstatement.equals(self.balancesheet_):
             metrics = ['Total assets', 'Total liabilities']
             colors = ['blue', 'green', 'white']
-        elif financialstatement.equals(self.cashflow):
+        elif financialstatement.equals(self.cashflow_):
             metrics = ['Cash from operating activities', 'Cash from investing activities', 'Cash from financing activities',
                        'Free cash flow']
             colors = ['blue', 'green', 'red', 'orange', 'white']
@@ -226,7 +192,7 @@ class Ticker:
     
     def unit_to_exponent(self, unit: str): 
         """
-        Returns exponent based on unit (billion, million, thousand).
+        Returns exponent based on unit (billion, million, thousand), e.g. 9 for billion because 10**9 is billion.
         """
         if unit == 'B':
             return 9
@@ -271,13 +237,27 @@ class Ticker:
                         pretaxincome: bool = False,
                         taxes: bool = False,
                         netincome: bool = False,
-                        totaloperexpenses:bool = False,
+                        totaloperexpenses: bool = False,
                         eps: bool = False,
                         ebitda: bool = False,
                         ebit: bool = False):
         """
-        Based on given parameters, returns income statement in pandas.DataFrame format. 
-        If no parameters are given, it includes all parameters into statement.
+        Based on given parameters, returns income statement in pandas.DataFrame format with given metrics.
+        To include metric, 'parameter_name=True'.
+        If no parameters are given, it includes all parameters into statement. 
+        possible parameters:
+            totalrevenue: Total Revenue ... revenue derived from the product or service a company sells
+            cogs: Cost of Goods Sold ... the amount of money a company spends to produce or manufacture the goods they sell
+            grossprofit: Gross Profit ... Total Revenue - COGS
+            operatingexpenses: Operating Expenses (excl. COGS) ... expenses a company incurs through its normal business operations, but excluding COGS
+            operatingincome: Operating Income ... represents the ordinary profit from a company’s core operations
+            pretaxincome: Pretax Income
+            taxes: Taxes
+            netincome: Net Income ...  the amout of money a company earns after expenses
+            totaloperexpenses: Total Operating Expenses ... COGS + Operating Expenses (excl. COGS)
+            eps: Earnings Per Share ... Net Income / average number of outstanding shares
+            ebitda: Earnings Before Interest, Taxes, Depreciation, and Amortization 
+            ebit: Earnings Before Interest and Taxes 
         """
         
         todrop = []
@@ -309,7 +289,7 @@ class Ticker:
             if ebit == False:
                 todrop.append("EBIT")
         
-        income_copy = self.incomestatement.copy()
+        income_copy = self.incomestatement_.copy()
         income_copy = income_copy.drop(todrop, axis=0)
         return income_copy
         
@@ -322,8 +302,16 @@ class Ticker:
                      netdebt: bool = False,
                      bookvaluepershare: bool = False):
         """
-        Based on given parameters, returns balance sheet statement in pandas.DataFrame format. 
-        If no parameters are given, it includes all parameters into statement.
+        Based on given parameters, returns balance sheet statement in pandas.DataFrame format with given metrics.
+        To include metric, 'parameter_name=True'.
+        If no parameters are given, it includes all parameters into statement. 
+        possible parameters:
+            totalassets: Total Assets ... represent property, including tangible assets, intangible assets, financial investments, cash and debt, which the company owns for a given period
+            totalliabilities: Total Liabilities ... the responsibilities of a company. It includes debts to creditors and suppliers, as well as contracts, funds or services received in advance for future sales or future services that will be performed
+            totalequity: Total Equity ... Total Assets - Total Liabilities
+            totaldebt: Total Debt ... represents all the interest-bearing obligations of the company
+            netdebt: Net Debt ...  represents the amount of debt that would remain after a company had paid off as much debt as possible with its liquid assets
+            bookvaluepershare: Book Value Per Share ... Total Equity / Total common shares outstanding
         """
         
         todrop = []
@@ -343,7 +331,7 @@ class Ticker:
             if bookvaluepershare == False:
                 todrop.append("Book value per share")
         
-        balance_copy = self.balancesheet.copy()
+        balance_copy = self.balancesheet_.copy()
         balance_copy = balance_copy.drop(todrop, axis=0)
         return balance_copy
     
@@ -354,8 +342,14 @@ class Ticker:
                  financing: bool = False,
                  freecashflow: bool = False):
         """
-        Based on given parameters, returns cashflow statement in pandas.DataFrame format. 
-        If no parameters are given, it includes all parameters into statement.
+        Based on given parameters, returns cash flow statement in pandas.DataFrame format with given metrics.
+        To include metric, 'parameter_name=True'.
+        If no parameters are given, it includes all parameters into statement. 
+        possible parameters:
+            operating: Cash From Operating Activities ...  the amount of cash that a company gets from its ongoing, regular business activities, such as the production and sale of goods or the provision of services to its customers
+            investing: Cash From Investing Activities ... the amount of cash that a company brings in from its investing activities. It includes any cash inflows or outflows from the company's long-term investments.
+            financing: Cash From Financing Activities ... the amount of cash that a company receives or pays to finance its activities (development of its business)
+            freecashflow: Free Cash Flow ... the cash that a company generates as a result of its activities, excluding expenses on assets
         """
         
         todrop = []
@@ -370,6 +364,6 @@ class Ticker:
             if freecashflow == False:
                 todrop.append("Free cash flow")
         
-        cash_copy = self.cashflow.copy()
+        cash_copy = self.cashflow_.copy()
         cash_copy = cash_copy.drop(todrop, axis=0)
         return cash_copy
