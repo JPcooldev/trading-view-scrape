@@ -1,10 +1,9 @@
 from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+#from selenium.webdriver.support import expected_conditions as EC
+#from selenium.webdriver.support.ui import WebDriverWait
 import re
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import time
 
